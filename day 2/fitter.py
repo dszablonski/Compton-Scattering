@@ -30,7 +30,7 @@ FIGURE_RESOLUTION = 600  # in dpi
 
 
 def linear(U,x):
-    return U[0]*x**3 + U[1]*x**2 + U[2]*x + U[3]
+    return  U[0]*x**3 + U[1]*x**2 + U[2]*x + U[3]
 
 def fitter(parameters, xdata, ydata):
     fit = np.polyfit(xdata, ydata, parameters - 1, cov = True)
@@ -202,5 +202,12 @@ def main():
     parameter, error = fitter(4, x, y)
     
     create_plot(x, y, parameter, error)
+     
+    x_lin = np.linspace(x[0],x[-1], num=200)
+
+    maximum = np.max(linear(parameter, x_lin))
+    maximum_index = np.where(linear(parameter, x_lin) == maximum)
+    
+    print(x_lin[maximum_index])
     
 main()
