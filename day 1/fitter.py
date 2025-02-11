@@ -24,7 +24,7 @@ MARKER_STYLE = 'x'  # See documentation for options:
 MARKER_COLOUR = 'black'
 GRID_LINES = True
 SAVE_FIGURE = True
-FIGURE_NAME = 'data1-no-offset-error.png'
+FIGURE_NAME = 'data1-with-offset-error.png'
 FIGURE_RESOLUTION = 600  # in dpi
 
 
