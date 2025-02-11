@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import string
+from scipy.optimize import curve_fit
 from math import *
 import numpy as np
 
@@ -31,6 +32,9 @@ FIGURE_RESOLUTION = 600  # in dpi
 
 def linear(U,x):
     return U[0]*x + U[1]
+
+def linear2(x, a, b):
+    return a*x + b
 
 def fitter(parameters, xdata, ydata):
     fit = np.polyfit(xdata, ydata, parameters - 1, cov = True)
@@ -198,6 +202,15 @@ def create_plot(x_data, y_data, parameters,
 def main():
     x, y = open_file()
     parameter, error = fitter(2, x, y)
+    
+    popt, pcov = curve_fit(linear2, x, y)
+    errors = np.sqrt(np.diag(pcov))
+    
+    print(popt)
+    print(errors)
+    
+    print("{:.4e}, {:.4e}".format(parameter[0], parameter[1]))
+    print("{:.4e}, {:.4e}".format(error[0], error[1]))
     
     create_plot(x, y, parameter, error)
     
