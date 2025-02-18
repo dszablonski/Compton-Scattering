@@ -5,11 +5,11 @@ from math import *
 import numpy as np
 
 FILE_NAME = 'data.csv'  # Remember to include the extension
-SKIP_FIRST_LINE = False
+SKIP_FIRST_LINE = True
 DELIMITER = ','  # Set to space, ' ', if working with .txt file without commas
 
 # Plotting details
-PLOT_TITLE = 'Day 1 Data with Zero Offset Applied'
+PLOT_TITLE = 'Extension'
 X_LABEL = r'$1 - \cos\theta$'
 Y_LABEL = r"$1/E'$ $(\text{keV}^{-1})$"
 AUTO_X_LIMITS = True
@@ -69,7 +69,7 @@ def validate_line(line):
     """
     line_split = line.split(DELIMITER)
 
-    line_floats = np.array([float(line_split[0]), float(line_split[1]), float(line_split[2])])
+    line_floats = np.array([float(line_split[0]), float(line_split[1]),float(line_split[2]),float(line_split[3]),float(line_split[4])])
    
     return True, line_floats
 
@@ -86,28 +86,32 @@ def open_file(file_name=FILE_NAME, skip_first_line=SKIP_FIRST_LINE):
         FileNotFoundError
     """
     # Create empty arrays ready to store the data
-    x_data = np.array([])
-    y_data = np.array([])
-    x_error = np.array([])
-    y_error = np.array([])
+    theta = np.array([])
+    iron = np.array([])
+    yew = np.array([])
+    lead = np.array([])
+    aluminium = np.array([])
     try:
         raw_file_data = open(file_name, 'r')
     except FileNotFoundError:
         print("File '{0:s}' cannot be found.".format(file_name))
         print('Check it is in the correct directory.')
-        return x_data, y_data
+        return theta, iron, yew, lead, aluminium
     for line in raw_file_data:
         if skip_first_line:
             skip_first_line = False
         else:
             line_valid, line_data = validate_line(line)
             if line_valid:
-                x_data = np.append(x_data, line_data[0])
-                y_data = np.append(y_data, line_data[1])
-                y_error = np.append(x_data,line_data[2])
+                print(line_data)
+                theta = np.append(theta, line_data[0])
+                aluminium = np.append(aluminium, line_data[1])
+                iron = np.append(iron, line_data[2])
+                yew = np.append(yew, line_data[3])
+                lead = np.append(lead, line_data[4])
 
     raw_file_data.close()
-    return x_data, y_data, y_error
+    return theta, iron, yew, lead, aluminium
 
 def chi_squared_function(x_data, y_data, parameters):
     """Calculates the chi squared for the data given, assuming a linear
@@ -123,7 +127,7 @@ def chi_squared_function(x_data, y_data, parameters):
     return np.sum(((y_data - linear(parameters, x_data))**2)/linear(parameters, x_data))
 
 
-def create_plot(x_data, y_data, yerror, parameters,
+def create_plot(theta, a, b, c, d, parameters,
                 parameter_uncertainties):
     """Produces graphic of resulting fit
     Args:
@@ -138,23 +142,29 @@ def create_plot(x_data, y_data, yerror, parameters,
     """
     # Main plot
     figure = plt.figure(figsize=(8, 6))
-
-    axes_main_plot = figure.add_subplot(211)
-
-    axes_main_plot.errorbar(x_data, y_data, yerr=yerror,
-                            fmt="x",color="black")
+    
+    fig, axes_main_plot = plt.subplots(subplot_kw={'projection': 'polar'})
+    
+    axes_main_plot.plot((theta), (a),".", color="r", label="Z = 13")
+    axes_main_plot.plot((theta), (b),".", color="b", label="Z = 26")
+    axes_main_plot.plot((theta), (c),".", color="g", label="Z = 6.87")
+    axes_main_plot.plot((theta), (d),".", color="purple", label="Z = 82")
+    
+    """
     axes_main_plot.plot(x_data, linear(parameters, x_data),
                         color=LINE_COLOUR)
+    """
     axes_main_plot.grid(GRID_LINES)
+    axes_main_plot.set_rticks([])
     axes_main_plot.set_title(PLOT_TITLE, fontsize=14)
-    axes_main_plot.set_xlabel(X_LABEL)
-    axes_main_plot.set_ylabel(Y_LABEL)
     # Fitting details
     chi_squared = chi_squared_function(x_data, y_data,
                                        parameters)
     degrees_of_freedom = len(x_data) - 2
     reduced_chi_squared = chi_squared / degrees_of_freedom
+    
 
+    """
     axes_main_plot.annotate((r'$\chi^2$ = {0:4.10f}'.
                              format(chi_squared)), (1, 0), (-60, -35),
                             xycoords='axes fraction', va='top',
@@ -185,7 +195,8 @@ def create_plot(x_data, y_data, yerror, parameters,
                             textcoords='offset points', va='top',
                             fontsize='10')
     # Residuals plot
-
+    """
+    
     if not AUTO_X_LIMITS:
         axes_main_plot.set_xlim(X_LIMITS)
 
@@ -195,17 +206,14 @@ def create_plot(x_data, y_data, yerror, parameters,
     if SAVE_FIGURE:
         plt.savefig(FIGURE_NAME, dpi=FIGURE_RESOLUTION, transparent=True)
     plt.show()
+    plt.legend()
     return None
 
 def main():
-    x, y, yerr = open_file()
-    print(x)
-    print(y[-1])
-    print(len(y))
-    print(len(yerr))
-    parameter, error = fitter(2, x, y)
+    theta, iron, yew, lead, aluminium = open_file()
+    parameter, error = fitter(2, theta, iron)
     
-    popt, pcov = curve_fit(linear2, x, y)
+    popt, pcov = curve_fit(linear2, theta, iron)
     errors = np.sqrt(np.diag(pcov))
     
     print(popt)
@@ -214,6 +222,6 @@ def main():
     print("{:.4e}, {:.4e}".format(parameter[0], parameter[1]))
     print("{:.4e}, {:.4e}".format(error[0], error[1]))
     
-    create_plot(x, y, yerr, parameter, error)
+    create_plot(theta, iron, yew, lead, aluminium, parameter, error)
     
 main()

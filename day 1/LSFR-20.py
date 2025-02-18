@@ -1,9 +1,40 @@
-import matplotlib.pyplot as plt
-import string
-from scipy.optimize import curve_fit
-from math import *
-import numpy as np
+# -*- coding: utf-8 -*-
+"""
+Least Squares Fitting Routine for Year 1 lab.
+Lloyd Cawthorne 12/06/20
 
+Adapted from lsfr.py by Abie Marshall 2016
+    Adapted from LSFR.m credits to:
+    Jordan Hulme
+    Adam Petrus
+    Ian Duerdoth
+    Paddy Leahy
+
+Reads in and validates data assuming given in columns: independent variable,
+dependent variable, uncertainty on dependent variable.
+
+Data is rejected and flagged for either being non-numerical or having an
+uncertainty less than or equal to zero. The script continues with the accepted
+data.
+
+Performs a least squares fit to a linear function, produces reduced chi
+squared, uncertainties and plot.
+
+Details of the fitting procedure can be found here:
+https://mathworld.wolfram.com/LeastSquaresFitting.html
+
+You will learn how to write code similar to this in PHYS20161: Introduction
+to Programming for Physicists.
+
+Edit the global constants (written in ALL_CAPS, below the import statements)
+to edit the file input and plot attributes.
+
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# File reading details
 FILE_NAME = 'data.csv'  # Remember to include the extension
 SKIP_FIRST_LINE = False
 DELIMITER = ','  # Set to space, ' ', if working with .txt file without commas
@@ -25,24 +56,20 @@ MARKER_STYLE = 'x'  # See documentation for options:
 MARKER_COLOUR = 'black'
 GRID_LINES = True
 SAVE_FIGURE = True
-FIGURE_NAME = 'data1-with-offset-error.png'
-FIGURE_RESOLUTION = 600  # in dpi
+FIGURE_NAME = 'thing .png'
+FIGURE_RESOLUTION = 1000  # in dpi
 
 
+def linear_function(x_variable, parameters):
+    """Outputs the result of y = mx + c, where m is the slope and c is the
+    offset.  parameters is an array such that [slope, offset].
+    Args:
+        x_variable: float
+        parameters: [float, float]
+    Returns: float
+    """
+    return parameters[0] * x_variable + parameters[1]
 
-def linear(U,x):
-    return U[0]*x + U[1]
-
-def linear2(x, a, b):
-    return a*x + b
-
-def fitter(parameters, xdata, ydata):
-    fit = np.polyfit(xdata, ydata, parameters - 1, cov = True)
-    
-    fit_parameters = fit[0]
-    fit_parameter_error = np.sqrt(np.diag(fit[1]))
-    
-    return fit_parameters, fit_parameter_error
 
 def check_numeric(entry):
     """Checks if entry is numeric
@@ -59,6 +86,19 @@ def check_numeric(entry):
     except ValueError:
         return False
 
+
+def check_uncertainty(uncertainty):
+    """Checks uncertainty is non-zero and positive.
+    Args:
+        uncertainty: float
+    Returns:
+        Bool
+    """
+    if uncertainty > 0:
+        return True
+    return False
+
+
 def validate_line(line):
     """Validates line. Outputs error messages accordingly.
     Args:
@@ -69,8 +109,17 @@ def validate_line(line):
     """
     line_split = line.split(DELIMITER)
 
-    line_floats = np.array([float(line_split[0]), float(line_split[1]), float(line_split[2])])
-   
+    for entry in line_split:
+        if check_numeric(entry) is False:
+            print('Line omitted: {0:s}.'.format(line.strip('\n')))
+            print('{0:s} is nonnumerical.'.format(entry))
+            return False, line_split
+    line_floats = np.array([float(line_split[0]), float(line_split[1]),
+                            float(line_split[2]), float(line_split[3])])
+    if line_floats[2] <= 0:
+        print('Line omitted: {0:s}.'.format(line.strip('\n')))
+        print('Uncertainty must be greater than zero.')
+        return False, line_floats
     return True, line_floats
 
 
@@ -88,14 +137,14 @@ def open_file(file_name=FILE_NAME, skip_first_line=SKIP_FIRST_LINE):
     # Create empty arrays ready to store the data
     x_data = np.array([])
     y_data = np.array([])
-    x_error = np.array([])
-    y_error = np.array([])
+    y_uncertainties = np.array([])
+    x_uncertaintties = np.array([])
     try:
         raw_file_data = open(file_name, 'r')
     except FileNotFoundError:
         print("File '{0:s}' cannot be found.".format(file_name))
         print('Check it is in the correct directory.')
-        return x_data, y_data
+        return x_data, y_data, y_uncertainties
     for line in raw_file_data:
         if skip_first_line:
             skip_first_line = False
@@ -104,12 +153,48 @@ def open_file(file_name=FILE_NAME, skip_first_line=SKIP_FIRST_LINE):
             if line_valid:
                 x_data = np.append(x_data, line_data[0])
                 y_data = np.append(y_data, line_data[1])
-                y_error = np.append(x_data,line_data[2])
-
+                y_uncertainties = np.append(y_uncertainties, line_data[2])
+                x_uncertaintties = np.append(x_uncertaintties, line_data[3])
     raw_file_data.close()
-    return x_data, y_data, y_error
+    return x_data, y_data, y_uncertainties, x_uncertaintties
 
-def chi_squared_function(x_data, y_data, parameters):
+
+def fitter(parameters, xdata, ydata):
+    fit = np.polyfit(xdata, ydata, parameters - 1, cov = True)
+    
+    fit_parameters = fit[0]
+    fit_parameter_error = np.sqrt(np.diag(fit[1]))
+    
+    return fit_parameters, fit_parameter_error
+
+def fitting_procedure(x_data, y_data, y_uncertainties):
+    """Implements an analytic approach according to source in header.
+    Args:
+        x_data: numpy array of floats
+        y_data: numpy array of floats
+        y_uncertainties: numpy array of floats
+    Returns:
+        parameters: numpy array of floats, [slope, offset]
+        parameter_uncertainties: numpy array of floats, [slope_uncertainty,
+                                 offset_uncertainty]
+        """
+    weights = 1. / y_uncertainties**2
+    repeated_term = (np.sum(weights) * np.sum(x_data**2 * weights)
+                     - np.sum(x_data * weights)**2)
+    slope = ((np.sum(weights) * np.sum(x_data * y_data * weights)
+              - np.sum(x_data * weights) * np.sum(y_data * weights))
+             / repeated_term)
+    slope_uncertainty = np.sqrt(np.sum(weights) / repeated_term)
+    offset = ((np.sum(y_data * weights) * np.sum(x_data**2 * weights)
+               - np.sum(x_data * weights) * np.sum(x_data * y_data * weights))
+              / repeated_term)
+    offset_uncertainty = np.sqrt(np.sum(x_data**2 * weights) / repeated_term)
+
+    return (np.array([slope, offset]), np.array([slope_uncertainty,
+                                                 offset_uncertainty]))
+
+
+def chi_squared_function(x_data, y_data, y_uncertainties, parameters):
     """Calculates the chi squared for the data given, assuming a linear
     relationship.
     Args:
@@ -120,10 +205,11 @@ def chi_squared_function(x_data, y_data, parameters):
     Returns:
         chi_squared: float
     """
-    return np.sum(((y_data - linear(parameters, x_data))**2)/linear(parameters, x_data))
+    return np.sum((linear_function(x_data, [parameters[0], parameters[1]])
+                   - y_data)**2 / y_uncertainties**2)
 
 
-def create_plot(x_data, y_data, yerror, parameters,
+def create_plot(x_data, y_data, y_uncertainties, x_unc, parameters,
                 parameter_uncertainties):
     """Produces graphic of resulting fit
     Args:
@@ -141,21 +227,21 @@ def create_plot(x_data, y_data, yerror, parameters,
 
     axes_main_plot = figure.add_subplot(211)
 
-    axes_main_plot.errorbar(x_data, y_data, yerr=yerror,
-                            fmt="x",color="black")
-    axes_main_plot.plot(x_data, linear(parameters, x_data),
+    axes_main_plot.errorbar(x_data, y_data, yerr=y_uncertainties, xerr=x_unc,
+                            fmt=MARKER_STYLE, color=MARKER_COLOUR)
+    axes_main_plot.plot(x_data, linear_function(x_data, parameters),
                         color=LINE_COLOUR)
     axes_main_plot.grid(GRID_LINES)
     axes_main_plot.set_title(PLOT_TITLE, fontsize=14)
     axes_main_plot.set_xlabel(X_LABEL)
     axes_main_plot.set_ylabel(Y_LABEL)
     # Fitting details
-    chi_squared = chi_squared_function(x_data, y_data,
+    chi_squared = chi_squared_function(x_data, y_data, y_uncertainties,
                                        parameters)
     degrees_of_freedom = len(x_data) - 2
     reduced_chi_squared = chi_squared / degrees_of_freedom
 
-    axes_main_plot.annotate((r'$\chi^2$ = {0:4.10f}'.
+    axes_main_plot.annotate((r'$\chi^2$ = {0:4.2f}'.
                              format(chi_squared)), (1, 0), (-60, -35),
                             xycoords='axes fraction', va='top',
                             textcoords='offset points', fontsize='10')
@@ -163,7 +249,7 @@ def create_plot(x_data, y_data, yerror, parameters,
                              format(degrees_of_freedom)), (1, 0), (-147, -55),
                             xycoords='axes fraction', va='top',
                             textcoords='offset points', fontsize='10')
-    axes_main_plot.annotate((r'Reduced $\chi^2$ = {0:4.10f}'.
+    axes_main_plot.annotate((r'Reduced $\chi^2$ = {0:4.2f}'.
                              format(reduced_chi_squared)), (1, 0), (-104, -70),
                             xycoords='axes fraction', va='top',
                             textcoords='offset points', fontsize='10')
@@ -185,35 +271,38 @@ def create_plot(x_data, y_data, yerror, parameters,
                             textcoords='offset points', va='top',
                             fontsize='10')
     # Residuals plot
+    residuals = y_data - linear_function(x_data, parameters)
+    axes_residuals = figure.add_subplot(414)
+    axes_residuals.errorbar(x_data, residuals, yerr=y_uncertainties, xerr=x_unc,
+                            fmt=MARKER_STYLE, color=MARKER_COLOUR)
+    axes_residuals.plot(x_data, 0 * x_data, color=LINE_COLOUR)
+    axes_residuals.grid(True)
+    axes_residuals.set_title('Residuals', fontsize=14)
 
     if not AUTO_X_LIMITS:
         axes_main_plot.set_xlim(X_LIMITS)
-
+        axes_residuals.set_xlim(X_LIMITS)
     if not AUTO_Y_LIMITS:
         axes_main_plot.set_ylim(Y_LIMITS)
+        axes_residuals.set_ylim(Y_LIMITS)
 
     if SAVE_FIGURE:
         plt.savefig(FIGURE_NAME, dpi=FIGURE_RESOLUTION, transparent=True)
     plt.show()
     return None
 
+
 def main():
-    x, y, yerr = open_file()
-    print(x)
-    print(y[-1])
-    print(len(y))
-    print(len(yerr))
-    parameter, error = fitter(2, x, y)
-    
-    popt, pcov = curve_fit(linear2, x, y)
-    errors = np.sqrt(np.diag(pcov))
-    
-    print(popt)
-    print(errors)
-    
-    print("{:.4e}, {:.4e}".format(parameter[0], parameter[1]))
-    print("{:.4e}, {:.4e}".format(error[0], error[1]))
-    
-    create_plot(x, y, yerr, parameter, error)
-    
-main()
+    """Main routine. Calls each function in turn.
+    Returns:
+        None"""
+    x_data, y_data, y_uncertainties, xerr = open_file()
+    parameters, parameter_uncertainties = fitter(2, x_data, y_data)
+    #parameters, parameter_uncertainties = fitting_procedure(x_data,y_data,y_uncertainties)
+    create_plot(x_data, y_data, y_uncertainties, xerr, parameters,
+                parameter_uncertainties)
+    return None
+
+
+if __name__ == '__main__':
+    main()
